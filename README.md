@@ -1,19 +1,80 @@
 # Opti System FF
 
-Plataforma Android de diagnóstico e otimização responsável para Free Fire e Free Fire MAX.
+**FF Performance Engine** — plataforma Android modular de diagnóstico, preparação e otimização responsável para Free Fire e Free Fire MAX.
 
-> O projeto está em fase de fundação. Nenhuma função será anunciada como otimização eficaz sem implementação verificável e evidência de teste.
+O objetivo é construir motores especializados e sistemas proprietários, não um limpador genérico de memória. Cada capacidade precisa ter uma fonte real de dados, política de compatibilidade, testes e evidência antes de ser apresentada como otimização eficaz.
 
-## Objetivos
+## Estado atual — Foundation 0.1.0
+- Projeto Android nativo em Kotlin + Jetpack Compose.
+- Módulos separados para modelos, motor de decisão, diagnósticos e perfis de jogo.
+- Painel com RAM disponível no sistema, armazenamento livre e estado térmico reportado pelo Android.
+- Detecção e abertura dos pacotes de Free Fire e Free Fire MAX.
+- Recomendações determinísticas e testes unitários.
+- GitHub Actions para testes, montagem do APK debug e publicação do artefato.
+- Registro de recursos implementados, planejados e indisponíveis.
 
-- Melhorar a consistência de desempenho e a experiência de jogo.
-- Suportar Free Fire e Free Fire MAX com perfis independentes.
-- Priorizar compatibilidade com Android sem root; capacidades adicionais serão opcionais via Shizuku/ADB.
-- Medir antes/depois e registrar limitações, riscos e resultados.
-- Preservar a integridade do jogo e do anti-cheat.
+**Importante:** esta primeira versão é somente leitura. Ainda não aplica tweaks, não encerra processos, não altera configurações do Android e não modifica arquivos dos jogos. Também não mede FPS real, frametime, uso de GPU/CPU do processo do jogo ou latência de toque.
 
-## Estado
+## Jogos suportados
+| Perfil | Pacote |
+|---|---|
+| Free Fire | com.dts.freefireth |
+| Free Fire MAX | com.dts.freefiremax |
 
-O repositório foi criado vazio. Este README é o commit inicial necessário para estabelecer o histórico Git; o desenvolvimento ocorrerá em branches de trabalho.
+A detecção é limitada a esses identificadores no manifesto; a permissão ampla QUERY_ALL_PACKAGES não é solicitada.
 
-Consulte a documentação de arquitetura assim que a branch de fundação for publicada.
+## Arquitetura
+| Módulo | Função |
+|---|---|
+| app | Interface, fluxo de usuário e composição |
+| core:model | Contratos e modelos sem dependência Android |
+| core:engine | Motor puro de análise e recomendações |
+| core:diagnostics | Coleta de dados públicos do Android |
+| core:games | Detecção e abertura dos jogos |
+
+A arquitetura prevê evolução para Performance Director, Adaptive Resource Manager, Frame Stability Intelligence, Thermal Prediction, Background Interference Controller, Network Stability Intelligence, Input Consistency Engine, Benchmark Lab, Conflict Detector e Recovery System. Esses subsistemas só serão ativados quando suas fontes, permissões e resultados forem verificáveis.
+
+## Plataforma de referência
+- Samsung Galaxy A06 SM-A065M
+- Android 16 / API 36
+- arm64-v8a
+- Sem root como requisito
+
+O suporte a outros aparelhos será adicionado por perfis e validação por API/OEM. O nome do aparelho, sozinho, não garante que um recurso de hardware esteja acessível.
+
+## Stack
+- Kotlin 2.4.21
+- Android Gradle Plugin 9.1.1
+- Gradle 9.3.1
+- Jetpack Compose BOM 2026.09.00
+- JDK 17
+- Android compile/target SDK 36
+
+O workflow do GitHub Actions instala Gradle e SDK Android necessários.
+
+## Build e testes
+Com JDK 17, Android SDK (platform 36) e Gradle 9.3.1 instalados:
+
+    gradle --no-daemon testDebugUnitTest
+    gradle --no-daemon assembleDebug
+
+O APK debug será gerado em app/build/outputs/apk/debug/app-debug.apk.
+
+No GitHub, o workflow Android CI executa testes e montagem do APK a cada push/PR nas branches configuradas. O artefato fica disponível por 14 dias.
+
+## Segurança e integridade
+- Sem root obrigatório.
+- Sem injeção, alteração de memória, edição de arquivos dos jogos ou interferência no anti-cheat.
+- Sem encerramento indiscriminado de processos.
+- Sem tweaks ocultos ou alterações automáticas irreversíveis.
+- Shizuku/ADB será opcional e condicionado a permissões e capacidades reais.
+- Nenhum ganho de FPS, ping, temperatura ou resposta de toque será prometido sem medição adequada.
+
+## Documentação
+- Architecture: docs/ARCHITECTURE.md
+- Safety model: docs/SAFETY_MODEL.md
+- Roadmap: docs/ROADMAP.md
+- Device support: docs/DEVICE_SUPPORT.md
+- Optimization registry: docs/OPTIMIZATION_REGISTRY.md
+- Session checkpoint: docs/SESSION_CHECKPOINT.md
+- Repository rules: AGENTS.md
