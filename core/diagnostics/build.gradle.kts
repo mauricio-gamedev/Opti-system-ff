@@ -4,7 +4,7 @@ plugins {
 
 android {
     namespace = "io.github.astromg01.optisystemff.core.diagnostics"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 26
