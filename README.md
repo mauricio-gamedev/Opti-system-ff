@@ -36,7 +36,7 @@ A arquitetura prevê evolução para Performance Director, Adaptive Resource Man
 
 ## Plataforma de referência
 - Samsung Galaxy A06 SM-A065M
-- Android 16 / API 36
+- Android 16 / API 36 no dispositivo
 - arm64-v8a
 - Sem root como requisito
 
@@ -48,12 +48,14 @@ O suporte a outros aparelhos será adicionado por perfis e validação por API/O
 - Gradle 9.3.1
 - Jetpack Compose BOM 2026.09.00
 - JDK 17
-- Android compile/target SDK 36
+- Android compileSdk 37 / targetSdk 36
+
+O compileSdk mais recente atende aos requisitos das bibliotecas AndroidX usadas; o targetSdk continua em 36, sem optar automaticamente pelos novos comportamentos de runtime da API 37.
 
 O workflow do GitHub Actions instala Gradle e SDK Android necessários.
 
 ## Build e testes
-Com JDK 17, Android SDK (platform 36) e Gradle 9.3.1 instalados:
+Com JDK 17, Android SDK (platform 37) e Gradle 9.3.1 instalados:
 
     gradle --no-daemon testDebugUnitTest
     gradle --no-daemon assembleDebug

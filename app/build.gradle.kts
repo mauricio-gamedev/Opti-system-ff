@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "io.github.astromg01.optisystemff"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "io.github.astromg01.optisystemff"
