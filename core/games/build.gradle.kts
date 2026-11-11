@@ -4,7 +4,7 @@ plugins {
 
 android {
     namespace = "io.github.astromg01.optisystemff.core.games"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 26
