@@ -46,16 +46,18 @@ O suporte a outros aparelhos será adicionado por perfis e validação por API/O
 - Kotlin 2.4.21
 - Android Gradle Plugin 9.1.1
 - Gradle 9.3.1
-- Jetpack Compose BOM 2026.09.00
+- Jetpack Compose BOM 2026.06.00 (linha Compose 1.11)
+- AndroidX Activity Compose 1.12.4
+- AndroidX Core KTX 1.17.0
 - JDK 17
-- Android compileSdk 37 / targetSdk 36
+- Android compileSdk 36 / targetSdk 36
 
-O compileSdk mais recente atende aos requisitos das bibliotecas AndroidX usadas; o targetSdk continua em 36, sem optar automaticamente pelos novos comportamentos de runtime da API 37.
+A base está fixada em versões estáveis de AndroidX que compilam com API 36. O alvo de instalação continua em minSdk 26; o app não exige Android 37.
 
 O workflow do GitHub Actions instala Gradle e SDK Android necessários.
 
 ## Build e testes
-Com JDK 17, Android SDK (platform 37) e Gradle 9.3.1 instalados:
+Com JDK 17, Android SDK (platform 36) e Gradle 9.3.1 instalados:
 
     gradle --no-daemon testDebugUnitTest
     gradle --no-daemon assembleDebug
