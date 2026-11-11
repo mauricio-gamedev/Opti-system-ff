@@ -22,4 +22,5 @@ include(
     ":core:engine",
     ":core:diagnostics",
     ":core:games",
+    ":core:session",
 )

@@ -15,29 +15,40 @@ class OptimizationAdvisor(
     private val lowStorageHeadroomThreshold: Double = 0.08,
 ) {
     fun evaluate(snapshot: DeviceSnapshot): List<DiagnosticFinding> = buildList {
-        snapshot.availableRamRatio?.let { ratio ->
-            when {
-                ratio < lowRamHeadroomThreshold -> add(
-                    DiagnosticFinding(
-                        id = "DIAG-RAM-LOW",
-                        severity = FindingSeverity.WARNING,
-                        title = "Pouca memória disponível",
-                        detail = "O Android informa pouca RAM disponível no sistema. Isso não representa o consumo exclusivo do Free Fire.",
-                        recommendation = "Antes da partida, feche manualmente apenas os aplicativos que você não pretende usar.",
-                        evidenceKind = EvidenceKind.OBSERVED,
-                    ),
-                )
-                ratio < constrainedRamHeadroomThreshold -> add(
-                    DiagnosticFinding(
-                        id = "DIAG-RAM-CONSTRAINED",
-                        severity = FindingSeverity.ATTENTION,
-                        title = "Margem de memória reduzida",
-                        detail = "A margem de RAM disponível está abaixo da faixa de referência deste diagnóstico.",
-                        recommendation = "Evite iniciar downloads, gravações ou outros aplicativos pesados durante a sessão.",
-                        evidenceKind = EvidenceKind.OBSERVED,
-                    ),
-                )
-            }
+        val ramRatio = snapshot.availableRamRatio
+        when {
+            snapshot.isSystemLowMemory -> add(
+                DiagnosticFinding(
+                    id = "DIAG-RAM-LOW",
+                    severity = FindingSeverity.WARNING,
+                    title = "Android reporta pouca memória",
+                    detail = "O próprio Android sinaliza uma condição de pouca memória. A leitura é do sistema inteiro, não do consumo exclusivo do Free Fire.",
+                    recommendation = "Feche manualmente aplicativos que você não vai usar e evite iniciar downloads ou gravações durante a partida.",
+                    evidenceKind = EvidenceKind.OBSERVED,
+                ),
+            )
+
+            ramRatio != null && ramRatio < lowRamHeadroomThreshold -> add(
+                DiagnosticFinding(
+                    id = "DIAG-RAM-LOW",
+                    severity = FindingSeverity.WARNING,
+                    title = "Pouca memória disponível",
+                    detail = "A margem de RAM disponível está muito baixa nesta leitura do sistema.",
+                    recommendation = "Feche manualmente apenas aplicativos que você não pretende usar. Não é recomendado encerrar processos do sistema à força.",
+                    evidenceKind = EvidenceKind.OBSERVED,
+                ),
+            )
+
+            ramRatio != null && ramRatio < constrainedRamHeadroomThreshold -> add(
+                DiagnosticFinding(
+                    id = "DIAG-RAM-CONSTRAINED",
+                    severity = FindingSeverity.ATTENTION,
+                    title = "Margem de memória reduzida",
+                    detail = "A margem de RAM disponível está abaixo da faixa de referência deste diagnóstico.",
+                    recommendation = "Evite iniciar downloads, gravações ou outros aplicativos pesados durante a sessão.",
+                    evidenceKind = EvidenceKind.OBSERVED,
+                ),
+            )
         }
 
         snapshot.availableStorageRatio?.takeIf { it < lowStorageHeadroomThreshold }?.let {
@@ -53,6 +64,19 @@ class OptimizationAdvisor(
             )
         }
 
+        if (snapshot.isPowerSaveMode) {
+            add(
+                DiagnosticFinding(
+                    id = "DIAG-POWER-SAVER",
+                    severity = FindingSeverity.ATTENTION,
+                    title = "Economia de energia ativada",
+                    detail = "O modo de economia está ativo. O impacto no jogo depende das políticas do Android e da Samsung.",
+                    recommendation = "Para comparar desempenho, mantenha o mesmo estado de economia em todos os testes. Desative manualmente somente se priorizar desempenho e bateria/temperatura permitirem.",
+                    evidenceKind = EvidenceKind.OBSERVED,
+                ),
+            )
+        }
+
         when (snapshot.thermalState) {
             ThermalState.MODERATE -> add(
                 thermalFinding(
@@ -61,6 +85,7 @@ class OptimizationAdvisor(
                     detail = "O Android reporta estado térmico moderado. A tendência pode evoluir durante uma partida longa.",
                 ),
             )
+
             ThermalState.SEVERE,
             ThermalState.CRITICAL,
             ThermalState.EMERGENCY,
@@ -71,6 +96,7 @@ class OptimizationAdvisor(
                     detail = "O Android reporta uma condição térmica elevada. O sistema pode limitar desempenho para proteger o aparelho.",
                 ),
             )
+
             ThermalState.UNAVAILABLE,
             ThermalState.NONE,
             ThermalState.LIGHT -> Unit

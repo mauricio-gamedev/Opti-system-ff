@@ -1,32 +1,34 @@
 # Roadmap
 
-## Phase 0 — Foundation (current)
-- [x] Establish repository history and a feature branch.
+## Phase 0 — Foundation
+- [x] Establish repository history and protected development branch workflow.
 - [x] Define module boundaries and safety constraints.
 - [x] Create Android app shell and diagnostic dashboard.
 - [x] Add read-only RAM, storage and thermal snapshots.
 - [x] Add separate Free Fire and Free Fire MAX package profiles.
 - [x] Add unit tests and Android CI workflow.
-- [ ] Confirm the first GitHub Actions run is green.
+- [x] Confirm CI passes and user validates Foundation 0.1.0 on Galaxy A06.
 
 ## Phase 1 — Device intelligence
-- [ ] Device capability inventory (SoC family, display mode, RAM class, API level and OEM limits).
-- [ ] Bounded sampling policy with battery-overhead checks.
-- [ ] Thermal trend history and lifecycle-safe monitoring.
-- [ ] Storage and memory trend diagnostics.
-- [ ] Device-specific compatibility profiles, starting with Galaxy A06 SM-A065M.
+- [x] Device capability inventory for OS-reported SoC, ABIs, low-RAM classification and display modes.
+- [x] Bounded on-demand sampling; no polling service or background loop.
+- [x] RAM pressure signal, storage, thermal status, power-save mode and battery percentage where available.
+- [ ] Continuous thermal trend history with a documented sampling/battery budget.
+- [ ] Device-specific compatibility profile review using captured SM-A065M values.
 
 ## Phase 2 — Session preparation
-- [ ] Game launch preparation checklist.
-- [ ] Optional user-mediated settings shortcuts.
+- [x] User-started session flow for Free Fire and Free Fire MAX.
+- [x] Separate game edition and before/after system snapshots.
+- [x] Bounded local history with a maximum of 20 completed records.
+- [ ] Optional user-mediated Android settings shortcuts.
 - [ ] Detect overlays and recording conditions where public APIs permit.
-- [ ] Separate profile persistence for each game edition.
 
 ## Phase 3 — Evidence lab
-- [ ] Session markers and repeatable benchmark protocol.
-- [ ] Frame-time/FPS integrations only through legitimate sources.
-- [ ] Before/after reports with confidence and measurement limitations.
-- [ ] Thermal and memory regression checks.
+- [x] Session markers and a repeatable before/after system snapshot protocol.
+- [x] Pure Kotlin comparison logic and boundary tests.
+- [ ] Frame-time/FPS integrations only through legitimate, available sources.
+- [ ] Repeatable multi-run reports with medians and confidence.
+- [ ] Thermal and memory time-series regression checks.
 
 ## Phase 4 — Optional advanced bridge
 - [ ] Shizuku connection and permission-state module.
@@ -37,7 +39,7 @@
 ## Phase 5 — Adaptive systems
 - [ ] Performance Director orchestration.
 - [ ] Adaptive Resource Manager recommendations.
-- [ ] Thermal Prediction from observed trends.
+- [ ] Thermal Prediction from supported observations.
 - [ ] Conflict detector and optimization scheduler.
 - [ ] Controlled experiments before any automatic action.
 

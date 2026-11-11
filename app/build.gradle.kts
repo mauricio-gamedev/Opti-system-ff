@@ -11,8 +11,8 @@ android {
         applicationId = "io.github.astromg01.optisystemff"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
     }
 
     buildFeatures {
@@ -30,6 +30,7 @@ dependencies {
     implementation(project(":core:engine"))
     implementation(project(":core:diagnostics"))
     implementation(project(":core:games"))
+    implementation(project(":core:session"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

@@ -26,7 +26,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -40,16 +42,29 @@ import io.github.astromg01.optisystemff.core.diagnostics.DeviceDiagnostics
 import io.github.astromg01.optisystemff.core.engine.DiagnosticFinding
 import io.github.astromg01.optisystemff.core.engine.FindingSeverity
 import io.github.astromg01.optisystemff.core.engine.OptimizationAdvisor
+import io.github.astromg01.optisystemff.core.engine.SessionComparison
+import io.github.astromg01.optisystemff.core.engine.SessionComparisonEngine
 import io.github.astromg01.optisystemff.core.games.GameCatalog
 import io.github.astromg01.optisystemff.core.model.DeviceSnapshot
 import io.github.astromg01.optisystemff.core.model.GameEdition
+import io.github.astromg01.optisystemff.core.model.GameSession
 import io.github.astromg01.optisystemff.core.model.ThermalState
+import io.github.astromg01.optisystemff.core.session.GameSessionStore
+import java.text.DateFormat
+import java.util.Date
 import java.util.Locale
 
 class MainActivity : ComponentActivity() {
     private val diagnostics by lazy { DeviceDiagnostics(this) }
     private val gameCatalog by lazy { GameCatalog(this) }
     private val advisor by lazy { OptimizationAdvisor() }
+    private val sessionStore by lazy { GameSessionStore(this) }
+    private val resumeSequence = mutableIntStateOf(0)
+
+    override fun onResume() {
+        super.onResume()
+        resumeSequence.intValue += 1
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -59,25 +74,74 @@ class MainActivity : ComponentActivity() {
             OptiSystemTheme {
                 var snapshot by remember { mutableStateOf(diagnostics.capture()) }
                 var installedGames by remember { mutableStateOf(gameCatalog.installedGames()) }
+                var activeSession by remember { mutableStateOf(sessionStore.activeSession()) }
+                var recentSessions by remember { mutableStateOf(sessionStore.recentSessions()) }
                 val findings = remember(snapshot) { advisor.evaluate(snapshot) }
+                val resumeToken = resumeSequence.intValue
+
+                LaunchedEffect(resumeToken) {
+                    snapshot = diagnostics.capture()
+                    installedGames = gameCatalog.installedGames()
+                    activeSession = sessionStore.activeSession()
+                    recentSessions = sessionStore.recentSessions()
+                }
 
                 DashboardScreen(
                     snapshot = snapshot,
                     findings = findings,
                     installedGames = installedGames,
+                    activeSession = activeSession,
+                    recentSessions = recentSessions,
                     onRefresh = {
                         snapshot = diagnostics.capture()
                         installedGames = gameCatalog.installedGames()
+                        activeSession = sessionStore.activeSession()
+                        recentSessions = sessionStore.recentSessions()
                     },
-                    onLaunchGame = { game ->
-                        val intent = gameCatalog.launchIntent(game)
-                        if (intent != null) {
-                            startActivity(intent)
-                        } else {
+                    onStartSession = { game ->
+                        val launchIntent = gameCatalog.launchIntent(game)
+                        if (launchIntent == null) {
                             Toast.makeText(
                                 this,
                                 game.displayName + " não está instalado ou não pode ser aberto.",
                                 Toast.LENGTH_LONG,
+                            ).show()
+                        } else {
+                            val startSnapshot = diagnostics.capture()
+                            val session = sessionStore.startSession(game, startSnapshot)
+                            if (session == null) {
+                                activeSession = sessionStore.activeSession()
+                                Toast.makeText(
+                                    this,
+                                    "Já existe uma sessão em andamento. Finalize-a antes de iniciar outra.",
+                                    Toast.LENGTH_LONG,
+                                ).show()
+                            } else {
+                                activeSession = session
+                                snapshot = startSnapshot
+                                runCatching { startActivity(launchIntent) }
+                                    .onFailure {
+                                        sessionStore.discardActiveSession()
+                                        activeSession = null
+                                        Toast.makeText(
+                                            this,
+                                            "Não foi possível abrir o jogo. A sessão foi descartada.",
+                                            Toast.LENGTH_LONG,
+                                        ).show()
+                                    }
+                            }
+                        }
+                    },
+                    onFinishSession = {
+                        val completed = sessionStore.finishSession(diagnostics.capture())
+                        activeSession = sessionStore.activeSession()
+                        recentSessions = sessionStore.recentSessions()
+                        snapshot = diagnostics.capture()
+                        if (completed != null) {
+                            Toast.makeText(
+                                this,
+                                "Sessão registrada no histórico.",
+                                Toast.LENGTH_SHORT,
                             ).show()
                         }
                     },
@@ -92,10 +156,14 @@ private fun DashboardScreen(
     snapshot: DeviceSnapshot,
     findings: List<DiagnosticFinding>,
     installedGames: Set<GameEdition>,
+    activeSession: GameSession?,
+    recentSessions: List<GameSession>,
     onRefresh: () -> Unit,
-    onLaunchGame: (GameEdition) -> Unit,
+    onStartSession: (GameEdition) -> Unit,
+    onFinishSession: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
+    val comparisonEngine = remember { SessionComparisonEngine() }
 
     Surface(modifier = Modifier.fillMaxSize(), color = colors.background) {
         Column(
@@ -120,7 +188,7 @@ private fun DashboardScreen(
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = "Painel de diagnóstico • Fundação 0.1.0",
+                    text = "Device Intelligence + Session Lab • 0.2.0",
                     color = colors.onSurfaceVariant,
                     fontSize = 13.sp,
                 )
@@ -128,21 +196,33 @@ private fun DashboardScreen(
 
             DeviceOverview(snapshot)
 
+            if (activeSession != null) {
+                ActiveSessionCard(session = activeSession, onFinish = onFinishSession)
+            }
+
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SectionHeading("Seus jogos", "Perfis independentes para cada edição.")
+                SectionHeading(
+                    title = "Seus jogos",
+                    subtitle = if (activeSession == null) {
+                        "Inicie uma sessão para comparar o estado do sistema antes e depois da partida."
+                    } else {
+                        "Finalize a sessão atual antes de registrar outra."
+                    },
+                )
                 GameEdition.entries.forEach { game ->
                     GameCard(
                         game = game,
                         installed = game in installedGames,
-                        onLaunch = { onLaunchGame(game) },
+                        canStart = activeSession == null,
+                        onStart = { onStartSession(game) },
                     )
                 }
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 SectionHeading(
-                    "Análise do aparelho",
-                    "Leituras públicas do Android; sem alterar configurações.",
+                    title = "Preparação pré-partida",
+                    subtitle = "Diagnóstico baseado em sinais públicos do Android.",
                 )
                 if (findings.isEmpty()) {
                     Card(
@@ -159,7 +239,7 @@ private fun DashboardScreen(
                                 fontWeight = FontWeight.SemiBold,
                             )
                             Text(
-                                "Isso não é uma certificação de FPS ou desempenho dentro do jogo.",
+                                "Isso não garante FPS estável. O diagnóstico não mede o processo do jogo.",
                                 color = colors.onSurfaceVariant,
                                 fontSize = 13.sp,
                             )
@@ -172,22 +252,43 @@ private fun DashboardScreen(
 
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 SectionHeading(
-                    "Motores do projeto",
-                    "Os módulos evoluem separadamente e passam por validação.",
+                    title = "Histórico de sessões",
+                    subtitle = "Comparação de snapshots do sistema. O histórico fica salvo neste aparelho.",
+                )
+                if (recentSessions.isEmpty()) {
+                    Text(
+                        "Nenhuma sessão registrada ainda. Inicie uma partida pelo painel para criar a primeira comparação.",
+                        color = colors.onSurfaceVariant,
+                        fontSize = 13.sp,
+                    )
+                } else {
+                    recentSessions.forEach { session ->
+                        SessionHistoryCard(
+                            session = session,
+                            comparison = comparisonEngine.compare(session),
+                        )
+                    }
+                }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SectionHeading(
+                    title = "Motores do projeto",
+                    subtitle = "Recursos implementados e limites declarados.",
                 )
                 EngineStatusCard(
-                    "Device Diagnostics",
-                    "RAM disponível, armazenamento e estado térmico.",
+                    "Device Intelligence",
+                    "Memória do sistema, SoC reportado, energia, bateria, tela e temperatura.",
                     "ATIVO",
                 )
                 EngineStatusCard(
-                    "Game Profiles",
-                    "Detecção e abertura dos dois jogos oficiais.",
+                    "Game Session Lab",
+                    "Snapshots antes/depois, comparação e histórico local limitado.",
                     "ATIVO",
                 )
                 EngineStatusCard(
                     "Performance Director",
-                    "Orquestração adaptativa e aplicação de políticas.",
+                    "Orquestração adaptativa de ações ainda em desenvolvimento.",
                     "EM DESENVOLVIMENTO",
                 )
                 EngineStatusCard(
@@ -210,7 +311,7 @@ private fun DashboardScreen(
             }
 
             Text(
-                text = "Esta versão é somente leitura. Nenhum tweak é aplicado automaticamente, nenhum processo é encerrado e nenhum arquivo dos jogos é modificado.",
+                text = "A coleta é sob demanda. O app registra snapshots e não altera configurações do sistema, não encerra processos e não modifica arquivos dos jogos. FPS/frametime reais ainda não são medidos.",
                 color = colors.onSurfaceVariant,
                 fontSize = 12.sp,
                 lineHeight = 17.sp,
@@ -223,6 +324,15 @@ private fun DashboardScreen(
 @Composable
 private fun DeviceOverview(snapshot: DeviceSnapshot) {
     val colors = MaterialTheme.colorScheme
+    val socLabel = listOfNotNull(snapshot.socManufacturer, snapshot.socModel)
+        .joinToString(" ")
+        .ifBlank { snapshot.hardware ?: "Não reportado pelo Android" }
+    val refreshLabel = snapshot.currentRefreshRateHz?.let { formatHertz(it) } ?: "Indisponível"
+    val supportedLabel = snapshot.supportedRefreshRatesHz
+        .takeIf { it.isNotEmpty() }
+        ?.joinToString(" / ") { formatHertz(it) }
+        ?: "Não informado"
+
     Card(
         colors = CardDefaults.cardColors(containerColor = colors.surface),
         shape = RoundedCornerShape(20.dp),
@@ -243,7 +353,9 @@ private fun DeviceOverview(snapshot: DeviceSnapshot) {
                     color = colors.onSurfaceVariant,
                     fontSize = 12.sp,
                 )
+                Text("SoC: $socLabel", color = colors.onSurfaceVariant, fontSize = 12.sp)
             }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -261,6 +373,29 @@ private fun DeviceOverview(snapshot: DeviceSnapshot) {
                     supporting = "de " + formatBytes(snapshot.totalStorageBytes),
                 )
             }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Metric(
+                    modifier = Modifier.weight(1f),
+                    label = "Tela agora",
+                    value = refreshLabel,
+                    supporting = "Suportados: $supportedLabel",
+                )
+                Metric(
+                    modifier = Modifier.weight(1f),
+                    label = "Bateria",
+                    value = snapshot.batteryPercent?.let { "$it%" } ?: "Indisponível",
+                    supporting = if (snapshot.isPowerSaveMode) {
+                        "Economia de energia ligada"
+                    } else {
+                        "Economia de energia desligada"
+                    },
+                )
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -274,6 +409,133 @@ private fun DeviceOverview(snapshot: DeviceSnapshot) {
                     fontWeight = FontWeight.SemiBold,
                 )
             }
+            Text(
+                text = buildString {
+                    append(if (snapshot.isLowRamDevice) "Perfil de pouca RAM" else "Perfil de RAM padrão")
+                    append(" • ")
+                    append(if (snapshot.isSystemLowMemory) "Android sinaliza pouca memória" else "Sem sinal de pouca memória")
+                },
+                color = if (snapshot.isSystemLowMemory) Color(0xFFFF817E) else colors.onSurfaceVariant,
+                fontSize = 12.sp,
+            )
+            Text(
+                text = "A taxa da tela não é o FPS do Free Fire. A RAM exibida é do sistema inteiro, não do processo do jogo.",
+                color = colors.onSurfaceVariant,
+                fontSize = 11.sp,
+                lineHeight = 15.sp,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ActiveSessionCard(session: GameSession, onFinish: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Card(
+        colors = CardDefaults.cardColors(containerColor = colors.surface),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(9.dp),
+        ) {
+            Text(
+                "Sessão em andamento",
+                color = colors.primary,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+            )
+            Text(
+                session.gameEdition.displayName + " • iniciada " + formatTimestamp(session.startedAtEpochMillis),
+                color = colors.onSurface,
+                fontSize = 13.sp,
+            )
+            Text(
+                "Quando voltar da partida, toque em finalizar para registrar a segunda leitura do aparelho.",
+                color = colors.onSurfaceVariant,
+                fontSize = 12.sp,
+                lineHeight = 16.sp,
+            )
+            Button(
+                onClick = onFinish,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = colors.primary,
+                    contentColor = Color(0xFF07110D),
+                ),
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Text("Finalizar sessão e comparar", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SessionHistoryCard(
+    session: GameSession,
+    comparison: SessionComparison?,
+) {
+    val colors = MaterialTheme.colorScheme
+    val endSnapshot = session.endSnapshot
+    Card(
+        colors = CardDefaults.cardColors(containerColor = colors.surface),
+        shape = RoundedCornerShape(16.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(15.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                session.gameEdition.displayName,
+                color = colors.onSurface,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                formatTimestamp(session.startedAtEpochMillis) +
+                    " • " + (comparison?.durationMillis?.let(::formatDuration) ?: "Sessão incompleta"),
+                color = colors.onSurfaceVariant,
+                fontSize = 11.sp,
+            )
+            if (comparison != null && endSnapshot != null) {
+                Text(
+                    "RAM disponível do sistema: " +
+                        formatSignedBytes(comparison.availableRamDeltaBytes),
+                    color = colors.onSurface,
+                    fontSize = 12.sp,
+                )
+                Text(
+                    "Temperatura do sistema: " +
+                        session.startSnapshot.thermalState.toDisplayLabel() +
+                        " → " + endSnapshot.thermalState.toDisplayLabel(),
+                    color = if ((comparison.thermalSeverityDelta ?: 0) > 0) {
+                        Color(0xFFFFC66D)
+                    } else {
+                        colors.onSurfaceVariant
+                    },
+                    fontSize = 12.sp,
+                )
+                if (comparison.systemLowMemoryBecameActive) {
+                    Text(
+                        "O Android passou a sinalizar pouca memória.",
+                        color = Color(0xFFFF817E),
+                        fontSize = 12.sp,
+                    )
+                }
+                if (comparison.powerSaveModeChanged) {
+                    Text(
+                        "O modo de economia de energia mudou durante a sessão.",
+                        color = colors.onSurfaceVariant,
+                        fontSize = 11.sp,
+                    )
+                }
+            }
+            Text(
+                "Variação entre leituras do sistema; não atribui a mudança apenas ao jogo e não representa FPS.",
+                color = colors.onSurfaceVariant,
+                fontSize = 11.sp,
+                lineHeight = 14.sp,
+            )
         }
     }
 }
@@ -297,7 +559,7 @@ private fun Metric(
     ) {
         Text(label, color = colors.onSurfaceVariant, fontSize = 11.sp)
         Text(value, color = colors.onSurface, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        Text(supporting, color = colors.onSurfaceVariant, fontSize = 11.sp)
+        Text(supporting, color = colors.onSurfaceVariant, fontSize = 10.sp, lineHeight = 13.sp)
     }
 }
 
@@ -305,7 +567,8 @@ private fun Metric(
 private fun GameCard(
     game: GameEdition,
     installed: Boolean,
-    onLaunch: () -> Unit,
+    canStart: Boolean,
+    onStart: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
     Card(
@@ -331,11 +594,11 @@ private fun GameCard(
                 )
             }
             OutlinedButton(
-                onClick = onLaunch,
-                enabled = installed,
+                onClick = onStart,
+                enabled = installed && canStart,
                 shape = RoundedCornerShape(12.dp),
             ) {
-                Text("Abrir")
+                Text("Iniciar sessão")
             }
         }
     }
@@ -451,6 +714,39 @@ private fun thermalColor(state: ThermalState): Color = when (state) {
 
 private fun formatBytes(bytes: Long): String {
     if (bytes <= 0L) return "Indisponível"
-    val gib = bytes / (1024.0 * 1024.0 * 1024.0)
-    return String.format(Locale.getDefault(), "%.1f GB", gib)
+    val megabytes = bytes / (1024.0 * 1024.0)
+    val gigabytes = megabytes / 1024.0
+    return when {
+        gigabytes >= 1.0 -> String.format(Locale.getDefault(), "%.1f GB", gigabytes)
+        megabytes >= 1.0 -> String.format(Locale.getDefault(), "%.0f MB", megabytes)
+        else -> String.format(Locale.getDefault(), "%.0f KB", bytes / 1024.0)
+    }
+}
+
+private fun formatSignedBytes(bytes: Long): String {
+    if (bytes == 0L) return "0 B"
+    val sign = if (bytes > 0L) "+" else "−"
+    return sign + formatBytes(kotlin.math.abs(bytes))
+}
+
+private fun formatHertz(value: Float): String =
+    String.format(Locale.getDefault(), "%.0f Hz", value)
+
+private fun formatTimestamp(epochMillis: Long): String =
+    DateFormat.getDateTimeInstance(
+        DateFormat.SHORT,
+        DateFormat.SHORT,
+        Locale("pt", "BR"),
+    ).format(Date(epochMillis))
+
+private fun formatDuration(durationMillis: Long): String {
+    val totalSeconds = (durationMillis / 1_000L).coerceAtLeast(0L)
+    val hours = totalSeconds / 3_600L
+    val minutes = (totalSeconds % 3_600L) / 60L
+    val seconds = totalSeconds % 60L
+    return if (hours > 0L) {
+        String.format(Locale.getDefault(), "%dh %02dm", hours, minutes)
+    } else {
+        String.format(Locale.getDefault(), "%dm %02ds", minutes, seconds)
+    }
 }

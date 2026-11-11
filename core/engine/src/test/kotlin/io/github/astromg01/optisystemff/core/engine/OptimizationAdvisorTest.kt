@@ -23,6 +23,26 @@ class OptimizationAdvisorTest {
     }
 
     @Test
+    fun platformLowMemorySignalTakesPriorityOverRatio() {
+        val findings = advisor.evaluate(
+            snapshot(
+                availableRamBytes = 4L * GB,
+                isSystemLowMemory = true,
+            ),
+        )
+
+        assertEquals("DIAG-RAM-LOW", findings.single().id)
+        assertEquals(FindingSeverity.WARNING, findings.single().severity)
+    }
+
+    @Test
+    fun powerSaverModeCreatesAnEvidenceBasedAttentionFinding() {
+        val findings = advisor.evaluate(snapshot(isPowerSaveMode = true))
+        assertEquals("DIAG-POWER-SAVER", findings.single().id)
+        assertEquals(FindingSeverity.ATTENTION, findings.single().severity)
+    }
+
+    @Test
     fun moderateThermalStateCreatesAttentionFinding() {
         val findings = advisor.evaluate(snapshot(thermalState = ThermalState.MODERATE))
         assertEquals("DIAG-THERMAL", findings.single().id)
@@ -46,6 +66,8 @@ class OptimizationAdvisorTest {
         availableRamBytes: Long = 4L * GB,
         availableStorageBytes: Long = 100L * GB,
         thermalState: ThermalState = ThermalState.NONE,
+        isSystemLowMemory: Boolean = false,
+        isPowerSaveMode: Boolean = false,
     ) = DeviceSnapshot(
         manufacturer = "Samsung",
         model = "SM-A065M",
@@ -57,6 +79,8 @@ class OptimizationAdvisorTest {
         availableStorageBytes = availableStorageBytes,
         thermalState = thermalState,
         capturedAtEpochMillis = 1L,
+        isSystemLowMemory = isSystemLowMemory,
+        isPowerSaveMode = isPowerSaveMode,
     )
 
     private companion object {
